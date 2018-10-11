@@ -13,8 +13,11 @@
 #include <string.h> 
 #include "PLL.h"
 #include "PORTE.h"
+#include "UART.h"
 
-unsigned long NumCreated;   // Number of foreground threads created
+unsigned long NumCreated;
+unsigned long TimeSlice ;
+unsigned long ContextSwitchTime;
 
 //******************* Measurement of context switch time **********
 // Run this to measure the time it takes to perform a task switch
@@ -39,18 +42,26 @@ unsigned long Count1;   // number of times thread1 loops
 unsigned long Count2;   // number of times thread2 loops
 unsigned long Count3;   // number of times thread3 loops
 unsigned long Count4;   // number of times thread4 loops
-unsigned long Count5;   // number of times thread5 loops
-
+unsigned long Count5; 
+unsigned long Stopth;
+unsigned long Startth;// number of times thread5 loops
+unsigned long startthh;
 void Thread1(void){
+	Startth=OS_Time();
   Count1 = 0;          
   for(;;){
     PE0 ^= 0x01;       // heartbeat
     Count1++;
+	 Stopth=OS_Time();
+		TimeSlice=OS_TimeDifference(Startth,Stopth);
     OS_Suspend();      // cooperative multitasking
   }
+	
 }
 void Thread2(void){
-  Count2 = 0;          
+	
+  Count2 = 0;    
+	ContextSwitchTime=OS_TimeDifference(OS_Time(),Stopth);
   for(;;){
     PE1 ^= 0x02;       // heartbeat
     Count2++;
@@ -62,17 +73,21 @@ void Thread3(void){
   for(;;){
     PE2 ^= 0x04;       // heartbeat
     Count3++;
+	//	startthh=OS_Time();
+		//TimeSlice=OS_TimeDifference(startthh,Startth);
     OS_Suspend();      // cooperative multitasking
   }
 }
 
-int Testmain1(void){  // Testmain1
+int main(void){  // Testmain1
   OS_Init();          // initialize, disable interrupts
-  PortE_Init();       // profile user threads
+  PortE_Init();
+  Output_Init(); 	// profile user threads
   NumCreated = 0 ;
-  NumCreated += OS_AddThread(&Thread1, 128, 1); 
-  NumCreated += OS_AddThread(&Thread2, 128, 2); 
-  NumCreated += OS_AddThread(&Thread3, 128, 3); 
+   NumCreated += OS_AddThread(&Thread1, 128, 1); 
+   NumCreated += OS_AddThread(&Thread2, 128, 2); 
+   NumCreated += OS_AddThread(&Thread3, 128, 3); 
+	// OS_AddThreads(&Thread1, &Thread2, &Thread3);
   // Count1 Count2 Count3 should be equal or off by one at all times
   OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
   return 0;            // this never executes

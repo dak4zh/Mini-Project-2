@@ -35,6 +35,7 @@ long StartCritical(void);    			// previous I bit, disable interrupts
 void EndCritical(long sr);    		// restore I bit to previous value
 void WaitForInterrupt(void);  		// low power mode
 void StartOS(void);
+void SysTick_Handler(void);                
 
 // Periodic task function pointers
 void (*PeriodicTask1)(void);
@@ -100,7 +101,7 @@ void SetInitialStack(int i){
 //         (maximum of 24 bits)
 // Outputs: none (does not return)
 void OS_Launch(unsigned long theTimeSlice){
-	NVIC_ST_RELOAD_R = theTimeSlice - 1; // reload value
+	NVIC_ST_RELOAD_R = theTimeSlice-1; // reload value
   NVIC_ST_CTRL_R = 0x00000007; // enable, core clock and interrupt arm
   StartOS();                   // start on the first task
 }
@@ -114,6 +115,16 @@ void OS_Launch(unsigned long theTimeSlice){
 // output: none
 void OS_Suspend(void) { 
 	// Your code here
+	//RunPt = RunPt->next;
+	  //NVIC_ST_RELOAD_R = TIME_2MS-1;
+	 NVIC_ST_CURRENT_R = 0;
+//	NVIC_ST_CTRL_R = 0x00000007; 
+	  NVIC_INT_CTRL_R=0x04000000;
+	  
+	 //  NVIC_ST_RELOAD_R = 0;
+    //     Scheduler();                
+    //     OS_Launch(TIME_1MS/10);
+      
 }
 
 //******** OS_AddThreads ***************
@@ -144,7 +155,78 @@ int OS_AddThreads(void(*task0)(void), void(*task1)(void), void(*task2)(void)){
 static uint32_t ThreadNum = 0;
 int OS_AddThread(void(*task)(void), unsigned long stackSize, unsigned long priority) {
 	// Your code here
-	return 1;      
+    int32_t status;
+	uint32_t p;
+	uint32_t po=0;
+	int32_t i,j;
+  status = StartCritical(); 
+ 	
+    //unint 32_t pos[20];
+    
+if (RunPt==0){
+      RunPt = &tcbs[0];
+
+      tcbs[0].next = &tcbs[0];
+      SetInitialStack(0); Stacks[0][STACKSIZE-2] = (int32_t)(task);
+      tcbs[0].id=0;
+      //tcbs[0].sp=&Stacks[0];
+      tcbs[0].available = 0; // 0 means the node is already allocated;
+      ThreadNum++;
+    //  pos[0]=1;  
+      p=0;                  
+	
+	//EndCritical(status);
+  return(1);}
+                                     
+ else {
+         if (ThreadNum <=NUMTHREADS-1){
+
+       		  for(i = 0;i<=NUMTHREADS-1;i++) {
+                            
+          		if((tcbs[i].available)== 0) {
+                            p=i;
+								        continue;
+                         }
+              if((tcbs[i].available)!= 0) {
+                         tcbs[i].available = 0;
+                         SetInitialStack(i); Stacks[i][STACKSIZE-2] = (int32_t)(task);
+                         // tcbs[i].sp = &Stacks[i];
+
+
+            		 
+                          
+                          if(i!=NUMTHREADS-1) {
+                          for (j = i+1;j<=NUMTHREADS-1;j++) {
+                            if((tcbs[j].available)== 0) {
+                        
+                              po=j;
+                             break;
+                              }
+                           }
+                          }
+                          if (po !=0) {
+                          tcbs[p].next= &tcbs[i];
+                          tcbs[i].next =& tcbs[po];
+                          }
+                          else
+                            {
+                             tcbs[i].next=&tcbs[0];
+                             tcbs[p].next=&tcbs[i];
+                           }
+                          tcbs[i].id=i;
+                          ThreadNum++;
+                          break;
+                        }
+                    }
+       		     EndCritical(status);
+                    return(1);
+               }
+          else {
+               EndCritical(status);
+                 return(0);
+              }
+      } 
+   
 }
 	 
 //******** OS_Id *************** 
@@ -171,6 +253,49 @@ void OS_Sleep(unsigned long sleepTime){
 // output: none
 void OS_Kill(void){
 	// Your code here
+	int32_t status;
+	  
+	 int32_t x =0; 
+	 int32_t po;
+	int32_t i,j;
+   unsigned long pos =  OS_Id();
+	status = StartCritical();
+   tcbs[pos].sp= 0;
+   tcbs[pos].next = 0;
+  // tcbs[pos-1].next=tcbs[pos+1].next;
+   tcbs[pos].available=1;
+
+for(i = 0;i<pos;i++) {
+                            
+          		if((tcbs[i].available)== 0) {
+                            x=i;
+                         }
+                       
+}
+            		 
+     
+     if(pos!=NUMTHREADS-1) {
+      for (j = pos+1;j<=NUMTHREADS-1;j++) {
+           if((tcbs[j].available)!= 0) {
+                        
+                po=j;
+                break;
+               }
+            }
+       }
+       if (po !=0) {
+           //  tcbs[p].next= &tcbs[i];
+              tcbs[x].next =& tcbs[po];
+                 }
+         else
+               {
+                 // tcbs[i].next=&tcbs[0];
+                  tcbs[x].next=&tcbs[0];
+                }
+                        
+   ThreadNum--;
+   OS_Suspend();
+	 EndCritical(status);
 }	
 
 //******** OS_AddPeriodicThread *************** 
@@ -204,7 +329,7 @@ int OS_AddPeriodicThread(void(*task)(void),
 //   this function and OS_TimeDifference have the same resolution and precision 
 unsigned long OS_Time(void) {
 	// Your code here
-	return 1;
+	return TIMER2_TAILR_R ;
 }
 
 // ******** OS_TimeDifference ************
@@ -216,7 +341,12 @@ unsigned long OS_Time(void) {
 //   this function and OS_Time have the same resolution and precision 
 unsigned long OS_TimeDifference(unsigned long start, unsigned long stop) {
 	// Your code here
-	return 1;
+	if(stop > start) {
+		     return (long) (stop - start);
+	}
+	else { return (long) (TIME_2MS-1-(stop-start));
+	}
+	
 }
 
 // Ms time system
@@ -226,8 +356,9 @@ static uint32_t MSTime;
 // Inputs:  none
 // Outputs: none
 // You are free to change how this works
-void OS_ClearMsTime(void) {
+void OS_ClearMsTime(void){
 	// Your code here
+	MSTime=0;
 }
 
 // ******** OS_MsTime ************
@@ -238,11 +369,13 @@ void OS_ClearMsTime(void) {
 // It is ok to make the resolution to match the first call to OS_AddPeriodicThread
 unsigned long OS_MsTime(void) {
 	// Your code here
-	return 1;
+	MSTime=TIMER2_TBR_R ;
+	return MSTime;
 }
 
 void Scheduler(void){
 	RunPt = RunPt->next;
+	PE3 ^= 0x06; 
 }
 
 //---------------------Timers-----------------------
